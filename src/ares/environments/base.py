@@ -17,12 +17,13 @@ import uuid
 from numpy.typing import NDArray
 
 from ares.code_agents import code_agent_base
-from ares.code_agents import llms
 from ares.code_agents import mini_swe_agent
 from ares.code_agents import stat_tracker
 from ares.containers import containers
 from ares.containers import daytona as ares_daytona
 from ares.environments import base
+from ares.llms import llm_clients
+from ares.llms import queue_mediated_client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -257,7 +258,7 @@ class Janitor:
 _ENVIRONMENT_JANITOR = Janitor()
 
 
-class CodeBaseEnv[TaskType](Environment[llms.LLMResponse, llms.LLMRequest | None, float, float]):
+class CodeBaseEnv[TaskType](Environment[llm_clients.LLMResponse, llm_clients.LLMRequest | None, float, float]):
     """Base environment for code agents that computes reward at the end of an episode."""
 
     def __init__(
@@ -278,8 +279,8 @@ class CodeBaseEnv[TaskType](Environment[llms.LLMResponse, llms.LLMRequest | None
         # We set the LLM client to a queue mediated client so that
         # we can return LLM requests in the reset and step methods.
         # We should never allow a user to pass a different LLM client.
-        self._llm_client = llms.QueueMediatedLLMClient(q=asyncio.Queue())
-        self._llm_req_future: asyncio.Future[llms.LLMResponse] | None = None
+        self._llm_client = queue_mediated_client.QueueMediatedLLMClient(q=asyncio.Queue())
+        self._llm_req_future: asyncio.Future[llm_clients.LLMResponse] | None = None
 
         # State.
         self._is_active = False
@@ -292,7 +293,7 @@ class CodeBaseEnv[TaskType](Environment[llms.LLMResponse, llms.LLMRequest | None
         # Register for cleanup on exit.
         _ENVIRONMENT_JANITOR.register_for_cleanup(self)
 
-    async def reset(self) -> base.TimeStep[llms.LLMRequest, float, float]:
+    async def reset(self) -> base.TimeStep[llm_clients.LLMRequest, float, float]:
         # Require the environment to be used as a context manager.
         reset_start_time = time.time()
         self._assert_active()
@@ -328,7 +329,7 @@ class CodeBaseEnv[TaskType](Environment[llms.LLMResponse, llms.LLMRequest | None
         self._tracker.scalar(f"{self._prefix}/reset", reset_end_time - reset_start_time)
         return result
 
-    async def step(self, action: llms.LLMResponse) -> base.TimeStep[llms.LLMRequest | None, float, float]:
+    async def step(self, action: llm_clients.LLMResponse) -> base.TimeStep[llm_clients.LLMRequest | None, float, float]:
         # Require the environment to be used as a context manager.
         step_start_time = time.time()
         self._assert_active()
@@ -367,7 +368,7 @@ class CodeBaseEnv[TaskType](Environment[llms.LLMResponse, llms.LLMRequest | None
 
     async def _get_time_step(
         self,
-    ) -> base.TimeStep[llms.LLMRequest | None, float, float]:
+    ) -> base.TimeStep[llm_clients.LLMRequest | None, float, float]:
         # Wait for the code agent to send another request or complete.
         _LOGGER.debug("[%d] Waiting for code agent or LLM request.", id(self))
         with self._tracker.timeit(f"{self._prefix}/get_from_queue"):

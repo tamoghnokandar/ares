@@ -19,9 +19,9 @@ from openai.types.chat import chat_completion_message_param
 import yaml
 
 from ares.code_agents import code_agent_base
-from ares.code_agents import llms
 from ares.code_agents import stat_tracker
 from ares.containers import containers
+from ares.llms import llm_clients
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ def _render_timeout_template(action: str, output: str) -> str:
 @dataclasses.dataclass(kw_only=True)
 class MiniSWECodeAgent(code_agent_base.CodeAgent):
     container: containers.Container
-    llm_client: llms.LLMClient
+    llm_client: llm_clients.LLMClient
     tracker: stat_tracker.StatTracker = dataclasses.field(default_factory=stat_tracker.NullStatTracker)
 
     def __post_init__(self):
@@ -180,7 +180,7 @@ class MiniSWECodeAgent(code_agent_base.CodeAgent):
         llm_response = await self.query()
         await self.execute_action(llm_response)
 
-    async def query(self) -> llms.LLMResponse:
+    async def query(self) -> llm_clients.LLMResponse:
         """Query the model and return the response."""
         # if 0 < self._config.step_limit <= self.model.n_calls or 0 < self.config.cost_limit <= self.model.cost:
         # raise LimitsExceeded()
@@ -188,7 +188,7 @@ class MiniSWECodeAgent(code_agent_base.CodeAgent):
 
         with self.tracker.timeit("mswea/llm_request"):
             response = await self.llm_client(
-                llms.LLMRequest(
+                llm_clients.LLMRequest(
                     messages=self._messages,
                     temperature=0.0,
                 )
@@ -202,7 +202,7 @@ class MiniSWECodeAgent(code_agent_base.CodeAgent):
 
         return response
 
-    async def execute_action(self, response: llms.LLMResponse) -> None:
+    async def execute_action(self, response: llm_clients.LLMResponse) -> None:
         """Execute the action and return the observation."""
         _LOGGER.debug("[%d] Executing action.", id(self))
         response_text = response.chat_completion_response.choices[0].message.content
